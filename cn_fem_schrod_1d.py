@@ -1,3 +1,8 @@
+"""
+Use the Crank-Nicholson method and finite element discretization in
+space to numerically integrate the Shrodinger equation in 1D
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse.linalg import eigsh

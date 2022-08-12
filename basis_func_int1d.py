@@ -1,3 +1,6 @@
+"""
+Compute various relations for 1D piecewise linear basis functions.
+"""
 from sympy import Symbol, Integral
 from sympy.abc import x
 

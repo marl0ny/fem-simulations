@@ -92,7 +92,7 @@ for k in elements_array.T[0]:
             phi1_x = np.array([1.0 if i == s else 0.0 for s in range(6)])
             phi1_y = np.array([1.0 if 3 + i == s else 0.0 for s in range(6)])
             f[m] += get_force(np.array([0.0, Fg]), phi1_x, element_vertices)
-            f[2*m] += get_force(np.array([0.0, Fg]), phi1_y,
+            f[m + N] += get_force(np.array([0.0, Fg]), phi1_y,
                                 element_vertices)
             for j in range(0, i+1):
                 v_j = element_vertices[j]
