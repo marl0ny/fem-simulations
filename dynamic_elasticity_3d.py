@@ -1,3 +1,25 @@
+"""
+Linear elasticity using the finite element method in 3D.
+Dynamics are calculated by doing a discretization in time
+and solving the subsequent implicit system
+using the conjugate gradient method.
+
+Plenty of bookkeeping is involved in writing this script; it is
+possible some errors still remain.
+
+Linear Elasticity notes:
+ - https://people.duke.edu/~hpgavin/StructuralDynamics/StructuralElements.pdf
+ - https://www.mit.edu/~nnakata/page/Teaching_files/GEOPHYS130/
+   GEOPHYS130_notes_all.pdf
+ - https://www.math.uci.edu/~chenlong/226/elasticity.pdf
+
+Linear basis functions on tetrahedral elements using natural coordinates
+are used. Polynomial integration relations are found here:
+ - T.J. Chung, "Finite Element Interpolation Functions", 
+   in Computational Fluid Dynamics, 2nd ed, CUP, 2010, 
+   ch 9, pp. 262-308.
+
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse import linalg
@@ -8,7 +30,7 @@ from read_m_mesh import get_vertices_and_edges
 
 # Lame constants
 LAMBDA = 1.0
-MU = 1.0
+MU = 3.0
 # Young modulus
 E = MU*(3.0*LAMBDA + 2.0*MU)/(LAMBDA + MU)
 # Poisson ratio
@@ -18,9 +40,9 @@ NU = 0.5*LAMBDA/(LAMBDA + MU)
 C = np.array([[1.0-NU, NU, NU, 0.0, 0.0, 0.0],
               [NU, 1.0-NU, NU, 0.0, 0.0, 0.0],
               [NU, NU, 1.0-NU, 0.0, 0.0, 0.0],
-              [0.0, 0.0, 0.0, (1.0 - 2.0*NU), 0.0, 0.0],
-              [0.0, 0.0, 0.0, 0.0, (1.0 - 2.0*NU), 0.0],
-              [0.0, 0.0, 0.0, 0.0, 0.0, (1.0 - 2.0*NU)]]
+              [0.0, 0.0, 0.0, (1.0 - 2.0*NU)/2.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0, (1.0 - 2.0*NU)/2.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0, 0.0, (1.0 - 2.0*NU)/2.0]]
              )*E/((1.0 + NU)*(1.0 - 2.0*NU))
 
 DT = 0.5
@@ -120,12 +142,12 @@ def get_force_on_element(f, element_vertices):
     return vol*(f.T @ G)/4.0
 
 
-vertices, elements = get_vertices_and_edges('./data/cone.m')
+vertices, elements = get_vertices_and_edges('./data/cylinder.txt')
 index_set = set()
 
 
 def in_boundary(vertex):
-    return vertex[2] < 0.0 + 1e-6
+    return vertex[0] < 0.0 + 1e-6
 
 
 vertices_index = np.arange(1, vertices.shape[0] + 1)
@@ -150,8 +172,8 @@ def in_interior(index):
 
 N = interior_vertices.shape[0]
 K = dok_matrix((3*N, 3*N))
-M = dok_matrix((3*N, 2*N))
-Fg = 0.005
+M = dok_matrix((3*N, 3*N))
+Fg = 0.002
 f = np.zeros([3*N])
 
 for k, element in enumerate(elements):
@@ -161,7 +183,7 @@ for k, element in enumerate(elements):
                         vertices[int(element[3])-1]]
     stiff_mat = get_stiffness_matrix(element_vertices)
     volume = get_volume_of_element(element_vertices)
-    fg_vec = Fg*np.array([0.0, -1.0, -1.0]) # /np.sqrt(2.0)
+    fg_vec = Fg*np.array([0.0, -1.0, 0.0]) # /np.sqrt(2.0)
     fe = get_force_on_element(fg_vec, element_vertices)
     for i in range(len(element_vertices)):
         if in_interior(element[i]):
@@ -185,6 +207,7 @@ for k, element in enumerate(elements):
                     stiff_mznx = stiff_mat[iz, jx]
                     stiff_mynz = stiff_mat[iy, jz]
                     stiff_mzny = stiff_mat[iz, jy]
+                    # Stiffness
                     K[mx, nx] += stiff_mxnx
                     K[my, ny] += stiff_myny
                     K[mz, nz] += stiff_mznz
@@ -194,6 +217,13 @@ for k, element in enumerate(elements):
                     K[mz, nx] += stiff_mznx
                     K[my, nz] += stiff_mynz
                     K[mz, ny] += stiff_mzny
+                    # Mass
+                    M[mx, nx] += volume/20.0
+                    M[my, ny] += volume/20.0
+                    M[mz, nz] += volume/20.0
+                    M[nx, mx] += volume/20.0
+                    M[ny, my] += volume/20.0
+                    M[nz, mz] += volume/20.0
                     if m != n:
                         K[nx, mx] += stiff_mxnx
                         K[ny, my] += stiff_myny
@@ -208,11 +238,13 @@ for k, element in enumerate(elements):
 
 # tmp = K.toarray()
 # print(np.amax(np.abs(tmp - tmp.T)))
-uxyz = linalg.cg(csr_matrix(K) + csr_matrix(M), f, tol=1e-8)[0]
-ux, uy, uz = uxyz[0:N], uxyz[N: 2*N], uxyz[2*N: 3*N]
-u = np.array([ux, uy, uz]).T
+M = csr_matrix(M)
+K = csr_matrix(K)
 xb = boundary_vertices
-x = interior_vertices + u
+x = interior_vertices.copy()
+zeros = np.zeros([3*N])
+frames = [zeros, zeros]
+
 fig = plt.figure()
 fig.suptitle('Linear Elasticity Using FEM in 3D')
 axes = fig.subplots(1, 3, sharey=True)
@@ -220,13 +252,41 @@ axes[0].set_aspect('equal')
 axes[1].set_aspect('equal')
 axes[2].set_aspect('equal')
 axes[0].scatter(xb.T[1], xb.T[2], alpha=0.5, color='black')
-axes[0].scatter(x.T[1], x.T[2], alpha=0.5)
+yz_data = axes[0].scatter(x.T[1], x.T[2], alpha=0.5)
 axes[0].set_xlabel('yz-plane')
 axes[1].scatter(xb.T[0], xb.T[2], alpha=0.5, color='black')
-axes[1].scatter(x.T[0], x.T[2], alpha=0.5)
+xz_data = axes[1].scatter(x.T[0], x.T[2], alpha=0.5)
 axes[1].set_xlabel('xz-plane')
 axes[2].scatter(xb.T[0], xb.T[1], alpha=0.5, color='black')
-axes[2].scatter(x.T[0], x.T[1], alpha=0.5)
+xy_data = axes[2].scatter(x.T[0], x.T[1], alpha=0.5)
 axes[2].set_xlabel('xy-plane')
+for i in range(3):
+    axes[i].set_xlim(-4.0, 4.0)
+    axes[i].set_ylim(-4.0, 4.0)
+
+
+def animation_func(*arg):
+    ux, uy, uz = np.zeros([N]), np.zeros([N]), np.zeros([N])
+    x = np.zeros([3, N])
+    for _ in range(3):
+        x0 = interior_vertices.copy()
+        u0, u1 = frames[0], frames[1]
+        f2 = (DT**2*(-0.5*K @ u0) + 2.0*M @ u1 - M @ u0
+               + DT**2*f
+               + 0.5*DT*(GAMMA1*M + GAMMA2*K) @ u0
+              )
+        uxyz = linalg.cg(M + DT**2*0.5*K + 0.5*DT*(M*GAMMA1 + K*GAMMA2), f2)[0]
+        ux, uy, uz = uxyz[0:N], uxyz[N: 2*N], uxyz[2*N: 3*N]
+        frames[0], frames[1] = u1, uxyz
+        x[0:N], x[1:N], x[2:N] = x0.T[0] + ux, x0.T[1] + uy, x0.T[2] + uz
+    yz_data.set(offsets=np.array([x[1], x[2]]).T)
+    xz_data.set(offsets=np.array([x[0], x[2]]).T)
+    xy_data.set(offsets=np.array([x[0], x[1]]).T)
+    return yz_data, xz_data, xy_data
+
+
+
+anim = animation.FuncAnimation(fig, animation_func,
+                               blit=True, interval=1.0)
 plt.show()
 plt.close()

@@ -11,7 +11,10 @@ z0, z1, z2, z3 = Symbol('z0'), Symbol('z1'), Symbol('z2'), Symbol('z3')
 
 
 # Transformation matrix to go from natural tetrahedral coordinates
-# to Cartesian.
+# to Cartesian. This matrix is found here:
+# - T.J. Chung, "Finite Element Interpolation Functions", 
+#   in Computational Fluid Dynamics, 2nd ed, CUP, 2010, 
+#   ch 9, pp. 262-308.
 matrix = Matrix([[1,  1,  1,  1],
                  [x0, x1, x2, x3],
                  [y0, y1, y2, y3],

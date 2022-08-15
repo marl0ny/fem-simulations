@@ -1,6 +1,12 @@
 """
 Numerically solve the time independent Schrodinger equation in 3D using
-a finite element discretization
+a finite element discretization.
+
+Linear basis functions on tetrahedral elements using natural coordinates
+are used. The polynomial integration formula is found here:
+ - T.J. Chung, "Finite Element Interpolation Functions", 
+   in Computational Fluid Dynamics, 2nd ed, CUP, 2010, 
+   ch 9, pp. 262-308.
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,18 +28,6 @@ def get_volume_of_element(element_vertices):
         element_vertices[2][z]
     x3, y3, z3 = element_vertices[3][x], element_vertices[3][y], \
         element_vertices[3][z]
-    # x01 = -element_vertices[0][x] + element_vertices[1][x]
-    # y01 = -element_vertices[0][y] + element_vertices[1][y]
-    # z01 = -element_vertices[0][z] + element_vertices[1][z]
-    # x02 = -element_vertices[0][x] + element_vertices[2][x]
-    # y02 = -element_vertices[0][y] + element_vertices[2][y]
-    # z02 = -element_vertices[0][z] + element_vertices[2][z]
-    # x03 = -element_vertices[0][x] + element_vertices[3][x]
-    # y03 = -element_vertices[0][y] + element_vertices[3][y]
-    # z03 = -element_vertices[0][z] + element_vertices[3][z]
-    # return (np.linalg.det(np.array([[x01, x02, x03],
-    #                                       [y01, y02, y03],
-    #                                       [z01, z02, z03]])))/6.0
     return -(x0*y1*z2 - x0*y1*z3 - x0*y2*z1 + x0*y2*z3 + x0*y3*z1
              - x0*y3*z2 - x1*y0*z2 + x1*y0*z3 + x1*y2*z0 - x1*y2*z3
              - x1*y3*z0 + x1*y3*z2 + x2*y0*z1 - x2*y0*z3 - x2*y1*z0
@@ -175,8 +169,8 @@ for k, element in enumerate(elements):
                     T[n, m] += (0.5*HBAR**2/M_E)*grad_elem_int
                     U[n, m] += potential_val
 
-n_states = 11
-n_state = 10
+n_states = 7
+n_state = 6
 # plt.imshow(csr_matrix(M)[0:100, 0:100].toarray()); plt.show(); plt.close()
 # import sys; sys.exit()
 # print(min(M), max(M))
@@ -193,7 +187,19 @@ for i in range(colours.shape[0]):
         b = 1.0 if val <= 0.0 else 0.0
         a = val**2/max_val
         colours[i, 0: 4] = np.array([r, 0.0, b, a])
+
+
 plt.style.use('dark_background')
+
+fig = plt.figure()
+fig.suptitle(f'Stationary State (n={n_state})')
+ax = fig.add_subplot(111, projection='3d')
+# ax.set_aspect('equal')
+ax.scatter(vertices.T[0], vertices.T[1], vertices.T[2], 
+           color=colours)
+plt.show()
+plt.close()
+
 fig = plt.figure()
 fig.suptitle(f'Stationary State (n={n_state})')
 axes = fig.subplots(1, 3, sharey=True)

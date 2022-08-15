@@ -1,6 +1,10 @@
 """
 Numerically solve the time-independent Schrodinger equation in 2D using
 a finite element discretization
+
+Reference:
+ - T. Jos, "The Finite Element Method for Partial Differential Equations," 
+   in Computational Physics, 2nd ed, CUP, 2013, ch 13, pp. 423 - 447. 
 """
 
 import numpy as np
@@ -120,14 +124,14 @@ for i in range(len(c)):
         val = eigvect[to_interiors_indices[int(index) - 1]]
         c[i] = val/np.amax(np.abs(val))
 plt.style.use('dark_background')
-plt.tripcolor(x, y, c, # cmap='hsv',
+# plt.tripcolor(x, y, c, # cmap='hsv',
               # shading='gouraud'
-)
-plt.title(f'Stationary State of Circular Well Using FEM (n = {n_state})')
-plt.xlabel('x')
-plt.ylabel('y')
-plt.show()
-plt.close()
+# )
+# plt.title(f'Stationary State of Circular Well Using FEM (n = {n_state})')
+# plt.xlabel('x')
+# plt.ylabel('y')
+# plt.show()
+# plt.close()
 for k in elements_array.T[0]:
     element = elements_array[int(k)-1]
     arr = np.array([vertices_array[int(element[1])-1],

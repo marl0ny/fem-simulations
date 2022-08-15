@@ -1,6 +1,10 @@
 """
 Numerically integrate the Schrodinger equation in 1D using
 a finite element discretization
+
+The 1D case for FEM is explained in its Wikipedia page:
+ - https://en.wikipedia.org/wiki/Finite_element_method
+ 
 """
 
 import numpy as np

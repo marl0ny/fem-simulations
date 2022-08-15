@@ -1,6 +1,10 @@
 """
 Use the Crank-Nicholson method and finite element discretization in
-space to numerically integrate the Shrodinger equation in 1D
+space to numerically integrate the Schrodinger equation in 1D
+
+The 1D case for FEM is explained in its Wikipedia page:
+ - https://en.wikipedia.org/wiki/Finite_element_method
+ 
 """
 
 import numpy as np

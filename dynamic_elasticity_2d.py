@@ -1,3 +1,17 @@
+"""
+Linear elasticity using the finite element method in 2D.
+Dynamics are calculated by doing a discretization in time
+and solving the subsequent implicit system
+using the conjugate gradient method.
+
+Plenty of bookkeeping is involved in writing this script; it is
+possible some errors still remain.
+
+Reference:
+ - T. Jos, "The Finite Element Method for Partial Differential Equations," 
+   in Computational Physics, 2nd ed, CUP, 2013, ch 13, pp. 423 - 447. 
+
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse import linalg
@@ -75,7 +89,7 @@ N = len(interior_vertices)
 K = dok_matrix((2*N, 2*N)) # Stiffness Matrix
 M = dok_matrix((2*N, 2*N)) # Mass Matrix
 f = np.zeros([2*N])
-Fg = -0.001
+Fg = -0.0005
 
 for k in elements_array.T[0]:
     element = elements_array[int(k)-1]
@@ -115,9 +129,9 @@ for k in elements_array.T[0]:
                     K[m, N + n] += stiffness_xy
                     K[N + m, n] += stiffness_yx
                     K[N + m, N + n] += stiffness_yy
+                    M[n, m] += mass
+                    M[N + n, N + m] += mass
                     if m != n:
-                        M[n, m] += mass
-                        M[N + n, N + m] += mass
                         K[n, m] += stiffness_xx
                         K[N + n, m] += stiffness_xy
                         K[n, N + m] += stiffness_yx

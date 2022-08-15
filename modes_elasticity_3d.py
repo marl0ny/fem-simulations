@@ -1,10 +1,12 @@
 """
-Static linear elasticity using the finite element method in 3D.
+Linear elasticity using the finite element method in 3D.
+The vibrational modes are computed using an eigensolver.
 
 Plenty of bookkeeping is involved in writing this script; it is
 possible some errors still remain.
 
-Notes on Linear Elasticity:
+
+Linear Elasticity references:
  - https://people.duke.edu/~hpgavin/StructuralDynamics/StructuralElements.pdf
  - https://www.mit.edu/~nnakata/page/Teaching_files/GEOPHYS130/
    GEOPHYS130_notes_all.pdf
@@ -15,6 +17,7 @@ are used. The polynomial integration formula is found here:
  - T.J. Chung, "Finite Element Interpolation Functions", 
    in Computational Fluid Dynamics, 2nd ed, CUP, 2010, 
    ch 9, pp. 262-308.
+
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -26,11 +29,12 @@ from read_m_mesh import get_vertices_and_edges
 
 # Lame constants
 LAMBDA = 1.0
-MU = 1.0
+MU = 3.0
 # Young modulus
 E = MU*(3.0*LAMBDA + 2.0*MU)/(LAMBDA + MU)
 # Poisson ratio
 NU = 0.5*LAMBDA/(LAMBDA + MU)
+# print(NU)
 # Elastic Matrix
 C = np.array([[1.0-NU, NU, NU, 0.0, 0.0, 0.0],
               [NU, 1.0-NU, NU, 0.0, 0.0, 0.0],
@@ -39,6 +43,18 @@ C = np.array([[1.0-NU, NU, NU, 0.0, 0.0, 0.0],
               [0.0, 0.0, 0.0, 0.0, (1.0 - 2.0*NU)/2.0, 0.0],
               [0.0, 0.0, 0.0, 0.0, 0.0, (1.0 - 2.0*NU)/2.0]]
              )*E/((1.0 + NU)*(1.0 - 2.0*NU))
+
+DT = 0.5
+# Density
+RHO = 1.0
+# Dissipation
+# GAMMA1 = 0.0
+# GAMMA1 = 0.01
+# GAMMA1 = 0.0012
+# Rayleigh Damping
+GAMMA1 = 0.007
+# GAMMA1 = 0.0004
+GAMMA2 = 1.0*GAMMA1
 
 
 def get_volume_of_element(element_vertices):
@@ -106,6 +122,8 @@ def get_deformation_matrix(element_vertices):
     D[3, 0:4], D[3, 4:8] = y_diffs, x_diffs
     D[4, 0:4], D[4, 8:12] = z_diffs, x_diffs
     D[5, 4:8], D[5, 8:12] = z_diffs, y_diffs
+    # tmp = np.diag([1.0, 1.0, 1.0, 0.5, 0.5, 0.5])
+    # D = tmp @ D
     return D
 
 
@@ -123,7 +141,9 @@ def get_force_on_element(f, element_vertices):
     return vol*(f.T @ G)/4.0
 
 
-vertices, elements = get_vertices_and_edges('./data/cylinder.txt')
+vertices, elements = get_vertices_and_edges('./data/prism.txt')
+index_set = set()
+
 
 def in_boundary(vertex):
     return vertex[0] < 0.0 + 1e-6
@@ -150,9 +170,9 @@ def in_interior(index):
 
 
 N = interior_vertices.shape[0]
-print(N)
 K = dok_matrix((3*N, 3*N))
-Fg = 0.0005
+M = dok_matrix((3*N, 3*N))
+Fg = 0.001
 f = np.zeros([3*N])
 
 for k, element in enumerate(elements):
@@ -161,7 +181,8 @@ for k, element in enumerate(elements):
                         vertices[int(element[2])-1],
                         vertices[int(element[3])-1]]
     stiff_mat = get_stiffness_matrix(element_vertices)
-    fg_vec = Fg*np.array([0.0, -3.0, 0.0])
+    volume = get_volume_of_element(element_vertices)
+    fg_vec = Fg*np.array([0.0, -1.0, 0.0]) # /np.sqrt(2.0)
     fe = get_force_on_element(fg_vec, element_vertices)
     for i in range(len(element_vertices)):
         if in_interior(element[i]):
@@ -185,6 +206,7 @@ for k, element in enumerate(elements):
                     stiff_mznx = stiff_mat[iz, jx]
                     stiff_mynz = stiff_mat[iy, jz]
                     stiff_mzny = stiff_mat[iz, jy]
+                    # Stiffness
                     K[mx, nx] += stiff_mxnx
                     K[my, ny] += stiff_myny
                     K[mz, nz] += stiff_mznz
@@ -194,6 +216,13 @@ for k, element in enumerate(elements):
                     K[mz, nx] += stiff_mznx
                     K[my, nz] += stiff_mynz
                     K[mz, ny] += stiff_mzny
+                    # Mass
+                    M[mx, nx] += volume/20.0
+                    M[my, ny] += volume/20.0
+                    M[mz, nz] += volume/20.0
+                    M[nx, mx] += volume/20.0
+                    M[ny, my] += volume/20.0
+                    M[nz, mz] += volume/20.0
                     if m != n:
                         K[nx, mx] += stiff_mxnx
                         K[ny, my] += stiff_myny
@@ -206,11 +235,34 @@ for k, element in enumerate(elements):
                         K[ny, mz] += stiff_mzny
 
 
-uxyz = linalg.cg(csr_matrix(K), f, tol=1e-8)[0]
-ux, uy, uz = uxyz[0:N], uxyz[N: 2*N], uxyz[2*N: 3*N]
-u = np.array([ux, uy, uz]).T
+# tmp = K.toarray()
+# print(np.amax(np.abs(tmp - tmp.T)))
+M = csr_matrix(M)
+K = csr_matrix(K)
 xb = boundary_vertices
-x = interior_vertices + u
+
+n_eigs = 6
+eigvals, eigvects = linalg.eigsh(K, M=M, which='LM', sigma=0.0, k=n_eigs)
+fm = linalg.cg(K, f)[0]
+amplitudes = np.array([0.0, 0.0, 1.0, 1.0, 1.0, 1.0])/2.0
+frequencies = np.zeros([n_eigs], dtype=np.complex128)
+for i in range(n_eigs):
+    frequency = 0.5*(-(GAMMA1 + GAMMA2*eigvals[i])
+                     + (0.0j + (GAMMA1 + GAMMA2*eigvals[i])**2
+                        - 4.0*eigvals[i])**0.5)
+    frequencies[i] = frequency
+start_phases = np.zeros([n_eigs], dtype=np.complex128)
+u = np.zeros([3*N])
+i = 0
+for a, phi in zip(amplitudes, start_phases):
+    eigvect = eigvects.T[i]
+    u += a*eigvect*np.cos(np.imag(phi))*np.exp(np.real(phi))
+    i += 1
+
+x = interior_vertices.copy()
+zeros = np.zeros([3*N])
+frames = [u.copy() + fm, u.copy() + fm]
+data = {'t': 0.0}
 
 fig = plt.figure()
 fig.suptitle('Linear Elasticity Using FEM in 3D')
@@ -219,24 +271,54 @@ axes[0].set_aspect('equal')
 axes[1].set_aspect('equal')
 axes[2].set_aspect('equal')
 axes[0].scatter(xb.T[1], xb.T[2], alpha=0.5, color='black')
-axes[0].scatter(x.T[1], x.T[2], alpha=0.5)
+yz_data = axes[0].scatter(x.T[1], x.T[2], alpha=0.5)
 axes[0].set_xlabel('yz-plane')
 axes[1].scatter(xb.T[0], xb.T[2], alpha=0.5, color='black')
-axes[1].scatter(x.T[0], x.T[2], alpha=0.5)
+xz_data = axes[1].scatter(x.T[0], x.T[2], alpha=0.5)
 axes[1].set_xlabel('xz-plane')
 axes[2].scatter(xb.T[0], xb.T[1], alpha=0.5, color='black')
-axes[2].scatter(x.T[0], x.T[1], alpha=0.5)
+xy_data = axes[2].scatter(x.T[0], x.T[1], alpha=0.5)
 axes[2].set_xlabel('xy-plane')
+for i in range(3):
+    if i == 0:
+        axes[i].set_xlim(-4.0, 1.0)
+        axes[i].set_ylim(-4.0, 4.0)
+    else:
+        axes[i].set_xlim(-1.0, 4.0)
+        axes[i].set_ylim(-4.0, 4.0)
+
+
+def animation_func(*arg):
+    ux, uy, uz = np.zeros([N]), np.zeros([N]), np.zeros([N])
+    x = np.zeros([3, N])
+    for _ in range(1):
+        data['t'] += DT
+        t = data['t']
+        x0 = interior_vertices.copy()
+        u0, u1 = frames[0], frames[1]
+        uxyz = np.zeros([3*N])
+        for i, a in enumerate(amplitudes):
+            w_r, w_i = np.real(frequencies[i]), np.imag(frequencies[i])
+            p_r, p_i = np.real(start_phases[i]), np.imag(start_phases[i])
+            uxyz += a*eigvects.T[i]*np.exp(w_r*t + p_r)*np.cos(w_i*t + p_i)
+        uxyz += fm
+        # f2 = (DT**2*(-0.5*K @ u0) + 2.0*M @ u1 - M @ u0
+        #        + DT**2*f
+        #        + 0.5*DT*(GAMMA1*M + GAMMA2*K) @ u0
+        #       )
+        # uxyz = linalg.cg(M + DT**2*0.5*K + 0.5*DT*(M*GAMMA1 + K*GAMMA2), f2)[0]
+        ux, uy, uz = uxyz[0:N], uxyz[N: 2*N], uxyz[2*N: 3*N]
+        frames[0], frames[1] = u1, uxyz
+        x[0:N], x[1:N], x[2:N] = x0.T[0] + ux, x0.T[1] + uy, x0.T[2] + uz
+    yz_data.set(offsets=np.array([x[1], x[2]]).T)
+    xz_data.set(offsets=np.array([x[0], x[2]]).T)
+    xy_data.set(offsets=np.array([x[0], x[1]]).T)
+    return yz_data, xz_data, xy_data
+
+
+
+anim = animation.FuncAnimation(fig, animation_func,
+                               blit=True, interval=1.0)
 plt.show()
 plt.close()
-
-fig = plt.figure()
-fig.suptitle('Linear Elasticity Using FEM in 3D')
-ax = fig.add_subplot(111, projection='3d')
-# ax.set_aspect('equal')
-ax.scatter(x.T[0], x.T[1], x.T[2], alpha=1.0)
-ax.scatter(xb.T[0], xb.T[1], xb.T[2], alpha=1.0, color='black')
-plt.show()
-plt.close()
-
 

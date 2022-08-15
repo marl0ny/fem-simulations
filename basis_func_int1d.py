@@ -1,5 +1,8 @@
 """
 Compute various relations for 1D piecewise linear basis functions.
+
+The 1D case for FEM is explained in its Wikipedia page:
+ - https://en.wikipedia.org/wiki/Finite_element_method
 """
 from sympy import Symbol, Integral
 from sympy.abc import x

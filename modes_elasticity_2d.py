@@ -1,3 +1,20 @@
+"""
+Linear elasticity using the finite element method in 2D.
+The vibrational modes are computed using an eigensolver.
+
+Plenty of bookkeeping is involved in writing this script; it is
+possible some errors still remain.
+
+
+References:
+ - T. Jos, "The Finite Element Method for Partial Differential Equations," 
+   in Computational Physics, 2nd ed, CUP, 2013, ch 13, pp. 423 - 447.
+
+These notes contain some basic information on how
+to do linear damping (7.3):
+ - https://people.duke.edu/~hpgavin/StructuralDynamics/StructuralElements.pdf
+
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse import linalg
@@ -25,7 +42,7 @@ RHO = 1.0
 # GAMMA1 = 0.01
 # GAMMA1 = 0.0012
 # Rayleigh Damping
-GAMMA1 = 0.0007
+GAMMA1 = 0.007
 # GAMMA1 = 0.0004
 GAMMA2 = 1.0*GAMMA1
 
@@ -114,13 +131,13 @@ for k in elements_array.T[0]:
                     n = to_interiors_indices[v_j[0]]
                     M[m, n] += mass
                     M[N + m, N + n] += mass
+                    M[n, m] += mass
+                    M[N + n, N + m] += mass
                     K[m, n] += stiffness_xx
                     K[m, N + n] += stiffness_xy
                     K[N + m, n] += stiffness_yx
                     K[N + m, N + n] += stiffness_yy
                     if m != n:
-                        M[n, m] += mass
-                        M[N + n, N + m] += mass
                         K[n, m] += stiffness_xx
                         K[N + n, m] += stiffness_xy
                         K[n, N + m] += stiffness_yx

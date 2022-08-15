@@ -1,3 +1,14 @@
+"""
+Static linear elasticity using the finite element method in 2D.
+
+Plenty of bookkeeping is involved in writing this script; it is
+possible some errors still remain.
+
+Reference:
+T. Jos, "The Finite Element Method for Partial Differential Equations," 
+in Computational Physics, 2nd ed, CUP, 2013, ch 13, pp. 423 - 447. 
+
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse import linalg
@@ -89,8 +100,6 @@ for k in elements_array.T[0]:
                     stiffness_mxnx = stiff_mat[i, j]
                     stiffness_mxny = stiff_mat[i, j + 3]
                     stiffness_mynx = stiff_mat[i + 3, j]
-                    # if stiffness_xy != stiffness_yx:
-                    #     print(i, j, stiffness_xy, stiffness_yx)
                     stiffness_myny = stiff_mat[i + 3, j + 3]
                     n = to_interiors_indices[v_j[0]]
                     nx, ny = n, n + N
@@ -105,15 +114,12 @@ for k in elements_array.T[0]:
                         K[ny, my] += stiffness_myny
 
 
-# tmp = K.toarray()
-# print(np.amax(np.abs(tmp - tmp.T)))
 x0 = interior_vertices.T[1]
 y0 = interior_vertices.T[2]
 xb = boundary_vertices.T[1]
 yb = boundary_vertices.T[2]
 uxy = linalg.cg(csr_matrix(K), f, tol=1e-8)[0]
 ux, uy = uxy[0:N], uxy[N:2*N]
-# plt.plot(uy); plt.show(); plt.close()
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
 ax.set_aspect('equal')
