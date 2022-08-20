@@ -26,7 +26,7 @@ def get_area_of_element(element_vertices):
     return (x10*y20 - x20*y10)/2.0
 
 
-def grad_basis_func_product(phi1, phi2, element_vertices):
+def get_stiffness_matrix(element_vertices):
     x, y = 1, 2
     area = get_area_of_element(element_vertices)
     x21 = -element_vertices[2][x] + element_vertices[1][x]
@@ -38,10 +38,11 @@ def grad_basis_func_product(phi1, phi2, element_vertices):
     coeffs1 = np.array([x21, x02, x10])
     coeffs2 = np.array([y12, y20, y01])
     stiffness = np.outer(coeffs1, coeffs1) + np.outer(coeffs2, coeffs2)
-    return 0.25*(phi1 @ stiffness @ phi2)/area
+    return 0.25*stiffness/area
 
 
-def get_potential_matrix(potential_vals):
+def get_potential_matrix(potential_vals, element_vertices):
+    area = get_area_of_element(element_vertices)
     mat = np.zeros([3, 3])
     for i in range(3):
         v_i = potential_vals[i]
@@ -56,7 +57,7 @@ def get_potential_matrix(potential_vals):
                 km = [p for p in range(3) if p != i]
                 v_k, v_m = potential_vals[km[0]], potential_vals[km[1]]
                 mat[i, i] = 2.0*(v_k + v_m + 3.0*v_i)
-    return mat
+    return mat*area/60.0
 
 
 vertices_array = np.loadtxt('./data/circle2.1.node', skiprows=1)
@@ -66,7 +67,7 @@ to_all_indices = {i: int(v[0]) for i, v in enumerate(interior_vertices)}
 to_interiors_indices = {int(v[0]): i for i, v in enumerate(interior_vertices)}
 N = len(interior_vertices)
 print(N)
-OMEGA = 30.0
+OMEGA = 0.0
 V = np.array([(OMEGA**2*M_E/2.0)*
               (vertices_array[i, 1]**2 + vertices_array[i, 2]**2)
               for i in range(vertices_array.shape[0])])
@@ -82,30 +83,26 @@ for k in elements_array.T[0]:
                         vertices_array[int(element[3])-1])
     potential_values = (V[int(element[1])-1], V[int(element[2])-1],
                         V[int(element[3])-1])
-    elem_int = get_area_of_element(element_vertices)/12.0
-    elem3_int = get_area_of_element(element_vertices)/60.0
-    potential_matrix = get_potential_matrix(potential_values)
+    area = get_area_of_element(element_vertices)
+    # if area == 0.0:
+    #     print(element)
+    potential_matrix = get_potential_matrix(potential_values, element_vertices)
+    stiffness_matrix = get_stiffness_matrix(element_vertices)
     for i in range(len(element_vertices)):
         v_i = element_vertices[i]
-        phi1 = np.array([1.0 if i == k else 0.0 for k in range(3)])
         for j in range(0, i+1):
             v_j = element_vertices[j]
-            phi2 = np.array([1.0 if j == k else 0.0 for k in range(3)])
             if v_i[3] < 1.0 and v_j[3] < 1.0:
-                # potential_val = elem3_int*(V[int(element[1])-1] +
-                #                            V[int(element[2])-1] +
-                #                            V[int(element[3])-1])
-                potential_val = elem3_int*(phi1 @ potential_matrix @ phi2)
-                grad_elem_int = grad_basis_func_product(phi1, phi2,
-                                                        element_vertices)
+                potential_val = potential_matrix[i, j]
+                stiffness_val = stiffness_matrix[i, j]
                 k = to_interiors_indices[v_i[0]]
                 l = to_interiors_indices[v_j[0]]
-                M[k, l] += elem_int
-                T[k, l] += (0.5*HBAR**2/M_E)*grad_elem_int
+                M[k, l] += area/12.0
+                T[k, l] += (0.5*HBAR**2/M_E)*stiffness_val
                 U[k, l] += potential_val
-                M[l, k] += elem_int
+                M[l, k] += area/12.0
                 if k != l:
-                    T[l, k] += (0.5*HBAR**2/M_E)*grad_elem_int
+                    T[l, k] += (0.5*HBAR**2/M_E)*stiffness_val
                     U[l, k] += potential_val
 
 
@@ -124,14 +121,6 @@ for i in range(len(c)):
         val = eigvect[to_interiors_indices[int(index) - 1]]
         c[i] = val/np.amax(np.abs(val))
 plt.style.use('dark_background')
-# plt.tripcolor(x, y, c, # cmap='hsv',
-              # shading='gouraud'
-# )
-# plt.title(f'Stationary State of Circular Well Using FEM (n = {n_state})')
-# plt.xlabel('x')
-# plt.ylabel('y')
-# plt.show()
-# plt.close()
 for k in elements_array.T[0]:
     element = elements_array[int(k)-1]
     arr = np.array([vertices_array[int(element[1])-1],

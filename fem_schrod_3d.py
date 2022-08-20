@@ -35,7 +35,7 @@ def get_volume_of_element(element_vertices):
              + x3*y1*z0 - x3*y1*z2 - x3*y2*z0 + x3*y2*z1)/6.0
 
 
-def grad_basis_func_product(phi1, phi2, element_vertices):
+def get_stiffness_matrix(element_vertices):
     x, y, z = 0, 1, 2
     x0, y0, z0 = element_vertices[0][x], element_vertices[0][y], \
         element_vertices[0][z]
@@ -63,10 +63,11 @@ def grad_basis_func_product(phi1, phi2, element_vertices):
                   (x0*y1 - x0*y3 - x1*y0 + x1*y3 + x3*y0 - x3*y1)/vol_6,
                   (-x0*y1 + x0*y2 + x1*y0 - x1*y2 - x2*y0 + x2*y1)/vol_6])
     stiffness = (vol_6/6.0)*(np.outer(a, a) + np.outer(b, b) + np.outer(c, c))
-    return phi1 @ stiffness @ phi2
+    return stiffness
 
 
-def get_potential_matrix(potential_vals):
+def get_potential_matrix(potential_vals, element_vertices):
+    vol = get_volume_of_element(element_vertices)
     mat = np.zeros([4, 4])
     for i in range(4):
         v_i = potential_vals[i]
@@ -83,25 +84,11 @@ def get_potential_matrix(potential_vals):
                                  potential_vals[k_neq_i[1]] +
                                  potential_vals[k_neq_i[2]] + 3.0*v_i)
 
-    return mat
+    return mat*vol/120.0
 
 
 
 vertices, elements = get_vertices_and_edges('./data/sphere.txt')
-# elements_set = set()
-# for e in elements:
-#     if tuple(e) in elements_set:
-#         print(e)
-#     elements_set.add(tuple(e))
-# vertices = vertices[1::]
-# index_set = set()
-# for e in elements:
-#     for i in e:
-#         index_set.add(i)
-# for i in range(1, len(vertices)+1):
-#     if not i in index_set:
-#         print(i)
-# import sys; sys.exit();
 vertices_index = np.arange(1, vertices.shape[0]+1)
 dist = np.zeros([vertices.shape[0]])
 for i in range(vertices.shape[0]):
@@ -137,37 +124,25 @@ for k, element in enumerate(elements):
                         vertices[int(element[1])-1],
                         vertices[int(element[2])-1],
                         vertices[int(element[3])-1]]
-    elem_int = get_volume_of_element(element_vertices)/120.0
+    # elem_int = get_volume_of_element(element_vertices)/120.0
+    vol = get_volume_of_element(element_vertices)
     potential_values = (V[int(element[1])-1], V[int(element[2])-1],
                         V[int(element[3])-1], V[int(element[0])-1])
-    potential_matrix = get_potential_matrix(potential_values)
-    f = 1.0
-    # if elem_int < 0.0:
-    #     f = -1.0
-    #     elem_int *= f
-    # if elem_int < 0.0:
-    #     elem_int *= -1.0
-    #     element_vertices = [element_vertices[1], element_vertices[0],
-    #                         element_vertices[2], element_vertices[3]]
+    potential_matrix = get_potential_matrix(potential_values, 
+                                            element_vertices)
+    stiffness_matrix = get_stiffness_matrix(element_vertices)
     for i in range(len(element_vertices)):
-        v_i = element_vertices[i]
-        phi1 = np.array([1.0 if i == p else 0.0 for p in range(4)])
         for j in range(0, i+1):
-            v_j = element_vertices[j]
-            phi2 = np.array([1.0 if j == p else 0.0 for p in range(4)])
             if in_interior(element[i]) and in_interior(element[j]):
-                potential_val = elem_int*(phi1 @ potential_matrix @ phi2)
-                grad_elem_int = f*grad_basis_func_product(phi1, phi2,
-                                                          element_vertices)
                 m = to_interior_indices[element[i]]
                 n = to_interior_indices[element[j]]
-                M[m, n] += 6.0*elem_int
-                T[m, n] += (0.5*HBAR**2/M_E)*grad_elem_int
-                U[m, n] += potential_val
-                M[n, m] += 6.0*elem_int
+                M[m, n] += vol/20.0
+                T[m, n] += (0.5*HBAR**2/M_E)*stiffness_matrix[i, j]
+                U[m, n] += potential_matrix[i, j]
+                M[n, m] += vol/20.0
                 if n != m:
-                    T[n, m] += (0.5*HBAR**2/M_E)*grad_elem_int
-                    U[n, m] += potential_val
+                    T[n, m] += (0.5*HBAR**2/M_E)*stiffness_matrix[i, j]
+                    U[n, m] += potential_matrix[i, j]
 
 n_states = 7
 n_state = 6
